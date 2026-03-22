@@ -816,7 +816,8 @@ const DEFAULT_TOKENS = [
 // ============================================================
 // SIMULATED MEV DATA (based on real DexScreener patterns)
 // ============================================================
-const TOKEN_POOL = ['ZIK','PEPE','TURBO','WOJAK','MOCHI','DOGE2','FLOKI','BABYX','SNEK','HONK','XAUt','stETH'];
+// Real tokens on Ethereum with active DEX trading
+const TOKEN_POOL = ['PEPE','SHIB','FLOKI','BONK','TURBO','XAUt','WOJAK','MEME','LADYS','AIDOGE','VOLT','BALD','TOSHI','LEASH','KISHU','ELON','DOGELON','HOGE','SAMO','BABYDOGE'];
 const PROTOCOLS = ['Uniswap V3','Uniswap V2','Curve','Balancer V2','SushiSwap','PancakeSwap','DODO'];
 const MEV_TYPES = ['arbitrage','arbitrage','arbitrage','sandwich','flash'];
 
@@ -852,7 +853,7 @@ function generateMevAlert() {
     time: timeStr,
     block: blockNumber,
     isNew: true,
-    isSmallCap: ['ZIK','WOJAK','MOCHI','DOGE2','FLOKI','BABYX','SNEK','HONK','TURBO','PEPE'].includes(token1)||['ZIK','WOJAK','MOCHI','DOGE2','FLOKI','BABYX','SNEK','HONK','TURBO','PEPE'].includes(token2)
+    isSmallCap: ['WOJAK','MEME','LADYS','AIDOGE','VOLT','BALD','TOSHI','LEASH','KISHU','ELON','DOGELON','HOGE','SAMO','BABYDOGE','FLOKI','BONK','TURBO'].includes(token1)||['WOJAK','MEME','LADYS','AIDOGE','VOLT','BALD','TOSHI','LEASH','KISHU','ELON','DOGELON','HOGE','SAMO','BABYDOGE','FLOKI','BONK','TURBO'].includes(token2)
   };
 }
 
@@ -860,7 +861,7 @@ function generateMevAlert() {
 // HELPERS
 // ============================================================
 function dexUrl(sym) {
-  return `https://dexscreener.com/ethereum/${sym.toLowerCase()}`;
+  return `https://dexscreener.com/ethereum?q=${sym}`;
 }
 function etherscanBlock(block) {
   return `https://etherscan.io/block/${block}`;
