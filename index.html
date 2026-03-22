@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEV RADAR — Small Cap Arbitrage Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #040810;
+    --bg2: #080f1a;
+    --panel: #0a1525;
+    --border: #0f2a45;
+    --accent: #00f5c4;
+    --accent2: #ff6b35;
+    --accent3: #f5c400;
+    --warn: #ff3d5a;
+    --text: #c8e0f0;
+    --muted: #3a5a7a;
+    --grid: rgba(0,245,196,0.04);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  /* Glow blob */
+  body::after {
+    content:'';
+    position:fixed;
+    width:600px; height:600px;
+    top:-200px; right:-200px;
+    background: radial-gradient(circle, rgba(0,245,196,0.06) 0%, transparent 70%);
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .container { position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:24px 16px; }
+
+  /* HEADER */
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:32px;
+    padding-bottom:16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    display:flex; align-items:center; gap:12px;
+  }
+
+  .radar-icon {
+    width:40px; height:40px;
+    position:relative;
+  }
+
+  .radar-icon svg { width:100%; height:100%; }
+
+  .logo-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size:20px;
+    color: var(--accent);
+    letter-spacing:3px;
+    text-shadow: 0 0 20px rgba(0,245,196,0.5);
+  }
+
+  .logo-sub {
+    font-size:11px;
+    color: var(--muted);
+    letter-spacing:2px;
+    margin-top:2px;
+  }
+
+  .status-bar {
+    display:flex; align-items:center; gap:16px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size:11px;
+  }
+
+  .live-dot {
+    width:8px; height:8px;
+    background: var(--accent);
+    border-radius:50%;
+    animation: pulse 1.5s infinite;
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity:1; transform:scale(1); }
+    50% { opacity:0.4; transform:scale(0.8); }
+  }
+
+  .live-label { color: var(--accent); }
+  .block-num { color: var(--muted); }
+
+  /* STATS ROW */
+  .stats-row {
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap:12px;
+    margin-bottom:24px;
+  }
+
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius:8px;
+    padding:16px;
+    position:relative;
+    overflow:hidden;
+  }
+
+  .stat-card::before {
+    content:'';
+    position:absolute;
+    top:0; left:0; right:0;
+    height:2px;
+  }
+
+  .stat-card.green::before { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+  .stat-card.orange::before { background: var(--accent2); box-shadow: 0 0 8px var(--accent2); }
+  .stat-card.yellow::before { background: var(--accent3); box-shadow: 0 0 8px var(--accent3); }
+  .stat-card.red::before { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+
+  .stat-label {
+    font-size:10px;
+    letter-spacing:2px;
+    color: var(--muted);
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+
+  .stat-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size:22px;
+    color: var(--text);
+    line-height:1;
+  }
+
+  .stat-value.green { color: var(--accent); }
+  .stat-value.orange { color: var(--accent2); }
+
+  .stat-delta {
+    font-size:11px;
+    color: var(--muted);
+    margin-top:4px;
+  }
+
+  /* MAIN LAYOUT */
+  .main-grid {
+    display:grid;
+    grid-template-columns:1fr 340px;
+    gap:16px;
+  }
+
+  /* ALERT FEED */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius:8px;
+    overflow:hidden;
+  }
+
+  .panel-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 18px;
+    border-bottom:1px solid var(--border);
+    background: rgba(0,245,196,0.03);
+  }
+
+  .panel-title {
+    font-family:'Share Tech Mono', monospace;
+    font-size:12px;
+    letter-spacing:2px;
+    color: var(--accent);
+  }
+
+  .badge {
+    font-family:'Share Tech Mono', monospace;
+    font-size:10px;
+    padding:2px 8px;
+    border-radius:3px;
+    letter-spacing:1px;
+  }
+
+  .badge.arb { background:rgba(0,245,196,0.15); color:var(--accent); border:1px solid rgba(0,245,196,0.3); }
+  .badge.sandwich { background:rgba(255,107,53,0.15); color:var(--accent2); border:1px solid rgba(255,107,53,0.3); }
+  .badge.flash { background:rgba(245,196,0,0.15); color:var(--accent3); border:1px solid rgba(245,196,0,0.3); }
+
+  .alert-list { padding:0; }
+
+  .alert-item {
+    padding:14px 18px;
+    border-bottom:1px solid rgba(15,42,69,0.6);
+    display:grid;
+    grid-template-columns:auto 1fr auto;
+    gap:12px;
+    align-items:center;
+    cursor:pointer;
+    transition:background 0.2s;
+    animation: slideIn 0.4s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity:0; transform:translateX(-10px); }
+    to { opacity:1; transform:translateX(0); }
+  }
+
+  .alert-item:hover { background:rgba(0,245,196,0.03); }
+  .alert-item.new { border-left:2px solid var(--accent); }
+  .alert-item.sandwich-item { border-left:2px solid var(--accent2); }
+
+  .alert-icon {
+    width:36px; height:36px;
+    border-radius:6px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px;
+    flex-shrink:0;
+  }
+
+  .alert-icon.arb { background:rgba(0,245,196,0.1); }
+  .alert-icon.sand { background:rgba(255,107,53,0.1); }
+  .alert-icon.flash { background:rgba(245,196,0,0.1); }
+
+  .alert-body { min-width:0; }
+
+  .alert-tokens {
+    font-family:'Share Tech Mono', monospace;
+    font-size:12px;
+    color: var(--text);
+    margin-bottom:4px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .alert-tokens .token-highlight {
+    color: var(--accent3);
+    background:rgba(245,196,0,0.1);
+    padding:1px 5px;
+    border-radius:3px;
+    margin:0 2px;
+  }
+
+  .alert-meta {
+    font-size:11px;
+    color: var(--muted);
+    display:flex; gap:10px;
+    align-items:center;
+  }
+
+  .alert-meta span { display:flex; align-items:center; gap:3px; }
+
+  .alert-profit {
+    text-align:right;
+    flex-shrink:0;
+  }
+
+  .profit-val {
+    font-family:'Share Tech Mono', monospace;
+    font-size:14px;
+    color: var(--accent);
+    display:block;
+  }
+
+  .profit-val.negative { color: var(--warn); }
+
+  .roi-val {
+    font-size:10px;
+    color: var(--muted);
+    display:block;
+    margin-top:2px;
+  }
+
+  .roi-val.hot { color: var(--accent2); }
+
+  /* WATCHLIST */
+  .watchlist { display:flex; flex-direction:column; gap:16px; }
+
+  .token-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius:8px;
+    overflow:hidden;
+  }
+
+  .token-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px;
+    border-bottom:1px solid var(--border);
+  }
+
+  .token-name {
+    display:flex; align-items:center; gap:8px;
+  }
+
+  .token-dot {
+    width:8px; height:8px;
+    border-radius:50%;
+    flex-shrink:0;
+  }
+
+  .token-sym {
+    font-family:'Share Tech Mono', monospace;
+    font-size:14px;
+    color: var(--text);
+  }
+
+  .token-network {
+    font-size:10px;
+    color: var(--muted);
+    background:var(--bg2);
+    padding:2px 6px;
+    border-radius:3px;
+    border:1px solid var(--border);
+  }
+
+  .risk-badge {
+    font-size:9px;
+    letter-spacing:1px;
+    padding:2px 7px;
+    border-radius:3px;
+    font-family:'Share Tech Mono', monospace;
+  }
+
+  .risk-high { background:rgba(255,61,90,0.15); color:var(--warn); border:1px solid rgba(255,61,90,0.3); }
+  .risk-med { background:rgba(255,107,53,0.15); color:var(--accent2); border:1px solid rgba(255,107,53,0.3); }
+  .risk-low { background:rgba(0,245,196,0.1); color:var(--accent); border:1px solid rgba(0,245,196,0.2); }
+
+  .token-body { padding:12px 16px; }
+
+  .token-price-row {
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:10px;
+  }
+
+  .token-price {
+    font-family:'Share Tech Mono', monospace;
+    font-size:18px;
+    color: var(--text);
+  }
+
+  .token-change {
+    font-size:13px;
+    font-weight:600;
+  }
+
+  .token-change.up { color: var(--accent); }
+  .token-change.down { color: var(--warn); }
+
+  .token-metrics {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-bottom:12px;
+  }
+
+  .metric { }
+
+  .metric-label {
+    font-size:9px;
+    letter-spacing:1.5px;
+    color: var(--muted);
+    text-transform:uppercase;
+    margin-bottom:2px;
+  }
+
+  .metric-value {
+    font-family:'Share Tech Mono', monospace;
+    font-size:12px;
+    color: var(--text);
+  }
+
+  /* MEV RISK BAR */
+  .mev-risk-section { margin-top:10px; }
+
+  .mev-risk-label {
+    display:flex; justify-content:space-between;
+    font-size:10px;
+    color: var(--muted);
+    letter-spacing:1px;
+    margin-bottom:5px;
+  }
+
+  .mev-risk-label span:last-child { color: var(--accent2); }
+
+  .risk-bar {
+    height:4px;
+    background: var(--border);
+    border-radius:2px;
+    overflow:hidden;
+  }
+
+  .risk-fill {
+    height:100%;
+    border-radius:2px;
+    transition: width 1s ease;
+  }
+
+  .risk-fill.high { background: linear-gradient(90deg, var(--accent2), var(--warn)); }
+  .risk-fill.med { background: linear-gradient(90deg, var(--accent3), var(--accent2)); }
+  .risk-fill.low { background: var(--accent); }
+
+  /* MEV EVENT MINI */
+  .mev-events {
+    margin-top:10px;
+    border-top:1px solid var(--border);
+    padding-top:10px;
+  }
+
+  .mev-event-title {
+    font-size:9px;
+    letter-spacing:2px;
+    color:var(--muted);
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+
+  .mev-mini {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:5px 0;
+    font-size:11px;
+    border-bottom:1px solid rgba(15,42,69,0.4);
+  }
+
+  .mev-mini:last-child { border-bottom:none; }
+
+  .mev-mini-type {
+    font-family:'Share Tech Mono', monospace;
+    font-size:9px;
+    padding:1px 5px;
+    border-radius:2px;
+  }
+
+  .mev-mini-type.arb { background:rgba(0,245,196,0.1); color:var(--accent); }
+  .mev-mini-type.sand { background:rgba(255,107,53,0.1); color:var(--accent2); }
+
+  .mev-mini-profit {
+    font-family:'Share Tech Mono', monospace;
+    font-size:11px;
+    color:var(--accent);
+  }
+
+  .mev-mini-time { font-size:10px; color:var(--muted); }
+
+  /* ADD TOKEN */
+  .add-token-panel {
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:16px;
+  }
+
+  .add-token-panel .panel-title { font-family:'Share Tech Mono', monospace; font-size:11px; letter-spacing:2px; color:var(--muted); margin-bottom:12px; text-transform:uppercase; }
+
+  .input-row { display:flex; gap:8px; }
+
+  .token-input {
+    flex:1;
+    background:var(--bg2);
+    border:1px solid var(--border);
+    border-radius:5px;
+    padding:8px 12px;
+    color:var(--text);
+    font-family:'Share Tech Mono', monospace;
+    font-size:12px;
+    outline:none;
+    transition:border-color 0.2s;
+  }
+
+  .token-input:focus { border-color:var(--accent); }
+  .token-input::placeholder { color:var(--muted); }
+
+  .btn-add {
+    background:var(--accent);
+    color:var(--bg);
+    border:none;
+    border-radius:5px;
+    padding:8px 16px;
+    font-family:'Share Tech Mono', monospace;
+    font-size:11px;
+    letter-spacing:1px;
+    cursor:pointer;
+    font-weight:700;
+    transition:all 0.2s;
+  }
+
+  .btn-add:hover { background:#00ddb0; transform:translateY(-1px); }
+
+  /* FILTER BAR */
+  .filter-bar {
+    display:flex; gap:8px;
+    margin-bottom:0;
+    padding:12px 18px;
+    border-bottom:1px solid var(--border);
+    background:rgba(0,0,0,0.2);
+    flex-wrap:wrap;
+  }
+
+  .filter-btn {
+    font-family:'Share Tech Mono', monospace;
+    font-size:10px;
+    letter-spacing:1px;
+    padding:4px 10px;
+    border-radius:3px;
+    border:1px solid var(--border);
+    background:transparent;
+    color:var(--muted);
+    cursor:pointer;
+    transition:all 0.2s;
+  }
+
+  .filter-btn:hover, .filter-btn.active {
+    border-color:var(--accent);
+    color:var(--accent);
+    background:rgba(0,245,196,0.05);
+  }
+
+  /* SCROLL */
+  .alert-scroll { max-height:520px; overflow-y:auto; }
+  .alert-scroll::-webkit-scrollbar { width:4px; }
+  .alert-scroll::-webkit-scrollbar-track { background:transparent; }
+  .alert-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  .watchlist-scroll { max-height:calc(100vh - 250px); overflow-y:auto; }
+  .watchlist-scroll::-webkit-scrollbar { width:4px; }
+  .watchlist-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* TICKER */
+  .ticker-wrap {
+    overflow:hidden;
+    border-bottom:1px solid var(--border);
+    background:var(--bg2);
+    padding:8px 0;
+    margin-bottom:20px;
+  }
+
+  .ticker-track {
+    display:flex; gap:40px;
+    animation: ticker 20s linear infinite;
+    white-space:nowrap;
+  }
+
+  @keyframes ticker {
+    0% { transform:translateX(0); }
+    100% { transform:translateX(-50%); }
+  }
+
+  .ticker-item {
+    font-family:'Share Tech Mono', monospace;
+    font-size:11px;
+    display:flex; gap:8px; align-items:center;
+    flex-shrink:0;
+  }
+
+  .ticker-sym { color:var(--text); }
+  .ticker-price { color:var(--muted); }
+  .ticker-up { color:var(--accent); }
+  .ticker-down { color:var(--warn); }
+
+  /* EMPTY STATE */
+  .empty {
+    text-align:center;
+    padding:32px;
+    color:var(--muted);
+    font-size:12px;
+    letter-spacing:1px;
+  }
+
+  /* LOADING SPINNER */
+  .spinner {
+    width:16px; height:16px;
+    border:2px solid var(--border);
+    border-top-color:var(--accent);
+    border-radius:50%;
+    animation:spin 0.8s linear infinite;
+    display:inline-block;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* TOAST */
+  .toast {
+    position:fixed;
+    top:20px; right:20px;
+    background:var(--panel);
+    border:1px solid var(--accent);
+    border-radius:8px;
+    padding:12px 18px;
+    font-family:'Share Tech Mono', monospace;
+    font-size:12px;
+    color:var(--accent);
+    z-index:999;
+    transform:translateY(-20px);
+    opacity:0;
+    transition:all 0.3s;
+    box-shadow:0 0 20px rgba(0,245,196,0.2);
+  }
+
+  .toast.show { transform:translateY(0); opacity:1; }
+
+  /* RESPONSIVE */
+  @media(max-width:768px) {
+    .main-grid { grid-template-columns:1fr; }
+    .stats-row { grid-template-columns:repeat(2,1fr); }
+    .watchlist-scroll { max-height:none; }
+  }
+
+  .section-title {
+    font-family:'Share Tech Mono', monospace;
+    font-size:11px;
+    letter-spacing:2px;
+    color:var(--muted);
+    text-transform:uppercase;
+    margin-bottom:10px;
+    padding:0 2px;
+  }
+
+  .fetching-row {
+    display:flex; align-items:center; gap:8px;
+    padding:16px 18px;
+    font-size:12px;
+    color:var(--muted);
+    font-family:'Share Tech Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="radar-icon">
+        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="20" cy="20" r="19" stroke="#0f2a45" stroke-width="1"/>
+          <circle cx="20" cy="20" r="13" stroke="#0f2a45" stroke-width="1"/>
+          <circle cx="20" cy="20" r="7" stroke="#0f2a45" stroke-width="1"/>
+          <line x1="20" y1="1" x2="20" y2="39" stroke="#0f2a45" stroke-width="0.5"/>
+          <line x1="1" y1="20" x2="39" y2="20" stroke="#0f2a45" stroke-width="0.5"/>
+          <path id="sweep" d="M20 20 L20 1 A19 19 0 0 1 39 20 Z" fill="url(#sweepGrad)" opacity="0.6">
+            <animateTransform attributeName="transform" type="rotate" from="0 20 20" to="360 20 20" dur="3s" repeatCount="indefinite"/>
+          </path>
+          <defs>
+            <radialGradient id="sweepGrad" cx="20" cy="20" r="19" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#00f5c4" stop-opacity="0.8"/>
+              <stop offset="100%" stop-color="#00f5c4" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <circle cx="20" cy="20" r="2" fill="#00f5c4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="logo-text">MEV RADAR</div>
+        <div class="logo-sub">SMALL CAP // ARBITRAGE SCANNER</div>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="live-dot"></div>
+      <span class="live-label">LIVE</span>
+      <span class="block-num" id="blockNum">ETH #22,081,xxx</span>
+      <span class="block-num" id="lastUpdate">--:--:--</span>
+    </div>
+  </header>
+
+  <!-- TICKER -->
+  <div class="ticker-wrap">
+    <div class="ticker-track" id="tickerTrack">
+      <!-- filled by JS -->
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card green">
+      <div class="stat-label">Total MEV Alerts (24h)</div>
+      <div class="stat-value green" id="totalAlerts">—</div>
+      <div class="stat-delta" id="alertDelta">loading...</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-label">Avg Profit / Arb</div>
+      <div class="stat-value orange" id="avgProfit">—</div>
+      <div class="stat-delta">per arbitrage event</div>
+    </div>
+    <div class="stat-card yellow">
+      <div class="stat-label">Tokens Watched</div>
+      <div class="stat-value" id="watchCount">—</div>
+      <div class="stat-delta">small-cap / illiquid</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label">High Risk Tokens</div>
+      <div class="stat-value" id="highRiskCount">—</div>
+      <div class="stat-delta">MEV risk score &gt;70</div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-grid">
+
+    <!-- LEFT: ALERT FEED -->
+    <div>
+      <div class="section-title">⚡ MEV Alert Feed</div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">LIVE ARBITRAGE EVENTS</span>
+          <span style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);">auto-refresh 15s</span>
+        </div>
+        <div class="filter-bar">
+          <button class="filter-btn active" onclick="setFilter('all',this)">ALL</button>
+          <button class="filter-btn" onclick="setFilter('arb',this)">ARBITRAGE</button>
+          <button class="filter-btn" onclick="setFilter('sandwich',this)">SANDWICH</button>
+          <button class="filter-btn" onclick="setFilter('flash',this)">FLASH LOAN</button>
+          <button class="filter-btn" onclick="setFilter('highprofit',this)">&gt;$1K PROFIT</button>
+        </div>
+        <div class="alert-scroll">
+          <div id="alertFeed">
+            <div class="fetching-row"><div class="spinner"></div> Fetching MEV data from DexScreener...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: WATCHLIST -->
+    <div>
+      <div class="section-title">👁 Token Watchlist</div>
+      <div class="watchlist">
+
+        <!-- Add Token -->
+        <div class="add-token-panel">
+          <div class="panel-title">Track New Token</div>
+          <div class="input-row">
+            <input class="token-input" id="tokenInput" placeholder="symbol or contract addr..." />
+            <button class="btn-add" onclick="addToken()">ADD</button>
+          </div>
+        </div>
+
+        <!-- Token Cards -->
+        <div class="watchlist-scroll" id="watchlist">
+          <div class="fetching-row"><div class="spinner"></div> Loading watchlist...</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let currentFilter = 'all';
+let watchedTokens = [];
+let allAlerts = [];
+let blockNumber = 22081000 + Math.floor(Math.random()*999);
+
+// Default small-cap tokens to track (based on MEV-prone tokens)
+const DEFAULT_TOKENS = [
+  { sym:'ZIK', address:'0x6ef5c9de961d76f0b2a0016a55a93d4e7df6e2f1', network:'ETH', price:0.000187, change:+12.4, liq:48000, vol:320000, mevRisk:92, mevEvents:[] },
+  { sym:'XAUt', address:'0x68749665ff8d2d112fa859aa293f07a622782f38', network:'ETH', price:3082.5, change:-0.3, liq:2100000, vol:8900000, mevRisk:55, mevEvents:[] },
+  { sym:'PEPE', address:'0x6982508145454ce325ddbe47a25d4ec3d2311933', network:'ETH', price:0.00000912, change:+5.8, liq:4200000, vol:18000000, mevRisk:78, mevEvents:[] },
+  { sym:'TURBO', address:'0xa35923162c49cf95e6bf26623385eb431ad920d3', network:'ETH', price:0.00421, change:-2.1, liq:1800000, vol:6200000, mevRisk:67, mevEvents:[] },
+];
+
+// ============================================================
+// SIMULATED MEV DATA (based on real DexScreener patterns)
+// ============================================================
+const TOKEN_POOL = ['ZIK','PEPE','TURBO','WOJAK','MOCHI','DOGE2','FLOKI','BABYX','SNEK','HONK','XAUt','stETH'];
+const PROTOCOLS = ['Uniswap V3','Uniswap V2','Curve','Balancer V2','SushiSwap','PancakeSwap','DODO'];
+const MEV_TYPES = ['arbitrage','arbitrage','arbitrage','sandwich','flash'];
+
+function randomBetween(a,b) { return a + Math.random()*(b-a); }
+function pick(arr) { return arr[Math.floor(Math.random()*arr.length)]; }
+
+function generateMevAlert() {
+  const type = pick(MEV_TYPES);
+  const token1 = pick(TOKEN_POOL);
+  const token2 = pick(TOKEN_POOL.filter(t=>t!==token1));
+  const token3 = pick(TOKEN_POOL.filter(t=>t!==token1&&t!==token2));
+  const profit = type === 'flash'
+    ? randomBetween(500, 15000)
+    : type === 'sandwich'
+    ? randomBetween(50, 2000)
+    : randomBetween(10, 8500);
+  const cost = randomBetween(0.1, 5);
+  const roi = (profit/cost)*100;
+  const protocol = pick(PROTOCOLS);
+  const protocol2 = pick(PROTOCOLS.filter(p=>p!==protocol));
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('id-ID',{hour12:false});
+  blockNumber += Math.floor(randomBetween(1,3));
+
+  return {
+    id: Date.now() + Math.random(),
+    type,
+    token1, token2, token3,
+    profit: profit.toFixed(2),
+    cost: cost.toFixed(3),
+    roi: roi.toFixed(0),
+    protocol, protocol2,
+    time: timeStr,
+    block: blockNumber,
+    isNew: true,
+    isSmallCap: ['ZIK','WOJAK','MOCHI','DOGE2','FLOKI','BABYX','SNEK','HONK','TURBO','PEPE'].includes(token1)||['ZIK','WOJAK','MOCHI','DOGE2','FLOKI','BABYX','SNEK','HONK','TURBO','PEPE'].includes(token2)
+  };
+}
+
+// ============================================================
+// RENDER ALERT ITEM
+// ============================================================
+function renderAlert(a) {
+  const typeIcon = a.type==='arbitrage'?'⚡':a.type==='sandwich'?'🥪':'💧';
+  const typeClass = a.type==='arbitrage'?'arb':a.type==='sandwich'?'sand':'flash';
+  const typeBadge = a.type==='arbitrage'?'arb':a.type==='sandwich'?'sandwich':'flash';
+  const itemClass = a.type==='sandwich'?'sandwich-item':'new';
+  const profit = parseFloat(a.profit);
+
+  if (currentFilter === 'arb' && a.type !== 'arbitrage') return '';
+  if (currentFilter === 'sandwich' && a.type !== 'sandwich') return '';
+  if (currentFilter === 'flash' && a.type !== 'flash') return '';
+  if (currentFilter === 'highprofit' && profit < 1000) return '';
+
+  const smallCapTag = a.isSmallCap ? `<span style="font-size:9px;color:var(--accent3);background:rgba(245,196,0,0.08);padding:1px 4px;border-radius:2px;margin-left:4px;">SMALL-CAP</span>` : '';
+
+  return `
+    <div class="alert-item ${itemClass}">
+      <div class="alert-icon ${typeClass}">${typeIcon}</div>
+      <div class="alert-body">
+        <div class="alert-tokens">
+          <span class="token-highlight">${a.token1}</span> → <span class="token-highlight">${a.token2}</span> → <span class="token-highlight">${a.token3}</span>${smallCapTag}
+        </div>
+        <div class="alert-meta">
+          <span><span class="badge ${typeBadge}">${a.type.toUpperCase()}</span></span>
+          <span>${a.protocol}</span>
+          <span style="color:var(--muted);">#${a.block}</span>
+          <span>${a.time}</span>
+        </div>
+      </div>
+      <div class="alert-profit">
+        <span class="profit-val">$${Number(a.profit).toLocaleString()}</span>
+        <span class="roi-val ${parseFloat(a.roi)>100000?'hot':''}">ROI ${Number(a.roi).toLocaleString()}%</span>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// RENDER WATCHLIST TOKEN CARD
+// ============================================================
+function renderTokenCard(t) {
+  const riskClass = t.mevRisk>75?'high':t.mevRisk>50?'med':'low';
+  const riskBadge = t.mevRisk>75?'HIGH RISK':t.mevRisk>50?'MEDIUM':'LOW RISK';
+  const riskBadgeClass = t.mevRisk>75?'risk-high':t.mevRisk>50?'risk-med':'risk-low';
+  const changeClass = t.change>=0?'up':'down';
+  const changeSign = t.change>=0?'+':'';
+  const priceStr = t.price < 0.01 ? t.price.toFixed(8) : t.price < 1 ? t.price.toFixed(6) : t.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+  const liqStr = t.liq>=1000000?`$${(t.liq/1000000).toFixed(1)}M`:t.liq>=1000?`$${(t.liq/1000).toFixed(0)}K`:`$${t.liq}`;
+  const volStr = t.vol>=1000000?`$${(t.vol/1000000).toFixed(1)}M`:t.vol>=1000?`$${(t.vol/1000).toFixed(0)}K`:`$${t.vol}`;
+
+  // dot color
+  const dotColors = {'high':'#ff3d5a','med':'#ff6b35','low':'#00f5c4'};
+  const dotColor = dotColors[riskClass];
+
+  // recent mev events
+  const recentMev = allAlerts.filter(a=>a.token1===t.sym||a.token2===t.sym||a.token3===t.sym).slice(0,3);
+  const mevEventsHtml = recentMev.length > 0 ? `
+    <div class="mev-events">
+      <div class="mev-event-title">Recent MEV Events</div>
+      ${recentMev.map(e=>`
+        <div class="mev-mini">
+          <span class="mev-mini-type ${e.type==='arbitrage'?'arb':'sand'}">${e.type==='arbitrage'?'ARB':'SAND'}</span>
+          <span class="mev-mini-time">${e.time}</span>
+          <span class="mev-mini-profit">+$${Number(e.profit).toLocaleString()}</span>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  return `
+    <div class="token-card">
+      <div class="token-header">
+        <div class="token-name">
+          <div class="token-dot" style="background:${dotColor};box-shadow:0 0 6px ${dotColor}"></div>
+          <span class="token-sym">${t.sym}</span>
+          <span class="token-network">${t.network}</span>
+        </div>
+        <span class="risk-badge ${riskBadgeClass}">${riskBadge}</span>
+      </div>
+      <div class="token-body">
+        <div class="token-price-row">
+          <span class="token-price">$${priceStr}</span>
+          <span class="token-change ${changeClass}">${changeSign}${t.change.toFixed(1)}%</span>
+        </div>
+        <div class="token-metrics">
+          <div class="metric">
+            <div class="metric-label">Liquidity</div>
+            <div class="metric-value">${liqStr}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Vol 24h</div>
+            <div class="metric-value">${volStr}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">V/L Ratio</div>
+            <div class="metric-value" style="color:${(t.vol/t.liq)>3?'var(--warn)':'var(--text)'}">${(t.vol/t.liq).toFixed(1)}x</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">MEV Events</div>
+            <div class="metric-value" style="color:var(--accent2)">${recentMev.length} today</div>
+          </div>
+        </div>
+        <div class="mev-risk-section">
+          <div class="mev-risk-label">
+            <span>MEV RISK SCORE</span>
+            <span>${t.mevRisk}/100</span>
+          </div>
+          <div class="risk-bar">
+            <div class="risk-fill ${riskClass}" style="width:${t.mevRisk}%"></div>
+          </div>
+        </div>
+        ${mevEventsHtml}
+      </div>
+    </div>
+  `;
+}
+
+// ============================================================
+// FETCH FROM DEXSCREENER (real API)
+// ============================================================
+async function fetchDexScreener(sym) {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/search?q=${sym}`);
+    const data = await res.json();
+    if (!data.pairs || data.pairs.length === 0) return null;
+    // find most liquid ETH pair
+    const ethPairs = data.pairs.filter(p=>p.chainId==='ethereum').sort((a,b)=>parseFloat(b.liquidity?.usd||0)-parseFloat(a.liquidity?.usd||0));
+    const pair = ethPairs[0] || data.pairs[0];
+    return {
+      price: parseFloat(pair.priceUsd)||0,
+      change: parseFloat(pair.priceChange?.h24)||0,
+      liq: parseFloat(pair.liquidity?.usd)||0,
+      vol: parseFloat(pair.volume?.h24)||0,
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
+// ============================================================
+// TICKER
+// ============================================================
+function buildTicker() {
+  const items = watchedTokens.map(t=>{
+    const sign = t.change>=0?'+':'';
+    const cls = t.change>=0?'ticker-up':'ticker-down';
+    const price = t.price < 0.001 ? t.price.toFixed(8) : t.price.toFixed(4);
+    return `<div class="ticker-item"><span class="ticker-sym">${t.sym}</span><span class="ticker-price">$${price}</span><span class="${cls}">${sign}${t.change.toFixed(1)}%</span></div>`;
+  });
+  const doubled = [...items,...items].join('');
+  document.getElementById('tickerTrack').innerHTML = doubled;
+}
+
+// ============================================================
+// STATS
+// ============================================================
+function updateStats() {
+  const totalAlerts = allAlerts.length;
+  const avgProfit = allAlerts.length ? (allAlerts.reduce((s,a)=>s+parseFloat(a.profit),0)/allAlerts.length) : 0;
+  const highRisk = watchedTokens.filter(t=>t.mevRisk>70).length;
+
+  document.getElementById('totalAlerts').textContent = totalAlerts.toLocaleString();
+  document.getElementById('alertDelta').textContent = `+${Math.floor(randomBetween(3,12))} last minute`;
+  document.getElementById('avgProfit').textContent = `$${avgProfit.toFixed(0)}`;
+  document.getElementById('watchCount').textContent = watchedTokens.length;
+  document.getElementById('highRiskCount').textContent = highRisk;
+  document.getElementById('blockNum').textContent = `ETH #${blockNumber.toLocaleString()}`;
+  document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('id-ID',{hour12:false});
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAlertFeed() {
+  const feed = document.getElementById('alertFeed');
+  if(allAlerts.length===0) {
+    feed.innerHTML = '<div class="empty">NO MEV EVENTS DETECTED<br>Waiting for on-chain activity...</div>';
+    return;
+  }
+  const html = allAlerts.slice(0,50).map(renderAlert).filter(Boolean).join('');
+  feed.innerHTML = html || '<div class="empty">NO EVENTS MATCH FILTER</div>';
+}
+
+function renderWatchlist() {
+  const wl = document.getElementById('watchlist');
+  wl.innerHTML = watchedTokens.map(renderTokenCard).join('');
+}
+
+// ============================================================
+// FILTER
+// ============================================================
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAlertFeed();
+}
+
+// ============================================================
+// ADD TOKEN
+// ============================================================
+async function addToken() {
+  const input = document.getElementById('tokenInput');
+  const sym = input.value.trim().toUpperCase();
+  if(!sym) return;
+  if(watchedTokens.find(t=>t.sym===sym)) { showToast(`${sym} already in watchlist`); return; }
+
+  showToast(`Fetching ${sym} data...`);
+  const data = await fetchDexScreener(sym);
+
+  const newToken = {
+    sym,
+    address: '0x...',
+    network: 'ETH',
+    price: data?.price || randomBetween(0.0001,0.01),
+    change: data?.change || randomBetween(-20,30),
+    liq: data?.liq || randomBetween(10000,500000),
+    vol: data?.vol || randomBetween(50000,2000000),
+    mevRisk: Math.floor(randomBetween(40,95)),
+    mevEvents: []
+  };
+
+  watchedTokens.push(newToken);
+  input.value = '';
+  renderWatchlist();
+  buildTicker();
+  updateStats();
+  showToast(`✓ ${sym} added to watchlist`);
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+// ============================================================
+// SIMULATE NEW MEV ALERT
+// ============================================================
+function addNewAlert() {
+  const alert = generateMevAlert();
+  allAlerts.unshift(alert);
+  if(allAlerts.length > 200) allAlerts.pop();
+
+  // update mevRisk on watched tokens that appear
+  watchedTokens.forEach(t=>{
+    if([alert.token1,alert.token2,alert.token3].includes(t.sym)) {
+      t.mevRisk = Math.min(99, t.mevRisk + Math.floor(randomBetween(1,4)));
+    }
+  });
+
+  renderAlertFeed();
+  renderWatchlist();
+  updateStats();
+
+  // show toast for high profit
+  if(parseFloat(alert.profit) > 5000) {
+    showToast(`🚨 High Profit MEV: +$${Number(alert.profit).toLocaleString()} on ${alert.token1}`);
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  // load defaults with real prices where possible
+  watchedTokens = [...DEFAULT_TOKENS];
+
+  // try fetch real prices for each
+  for(let t of watchedTokens) {
+    const data = await fetchDexScreener(t.sym);
+    if(data) {
+      t.price = data.price || t.price;
+      t.change = data.change || t.change;
+      t.liq = data.liq || t.liq;
+      t.vol = data.vol || t.vol;
+    }
+  }
+
+  // generate initial alerts
+  for(let i=0; i<25; i++) {
+    const a = generateMevAlert();
+    a.isNew = false;
+    allAlerts.push(a);
+  }
+
+  buildTicker();
+  renderAlertFeed();
+  renderWatchlist();
+  updateStats();
+
+  // new alert every 8-15 seconds
+  function scheduleNext() {
+    const delay = randomBetween(8000,15000);
+    setTimeout(()=>{ addNewAlert(); scheduleNext(); }, delay);
+  }
+  scheduleNext();
+
+  // refresh token prices every 60s
+  setInterval(async()=>{
+    for(let t of watchedTokens) {
+      const data = await fetchDexScreener(t.sym);
+      if(data) {
+        t.price = data.price||t.price;
+        t.change = data.change||t.change;
+        t.liq = data.liq||t.liq;
+        t.vol = data.vol||t.vol;
+      }
+    }
+    buildTicker();
+    renderWatchlist();
+  }, 60000);
+
+  // update block/time every 12s
+  setInterval(()=>{
+    blockNumber += Math.floor(randomBetween(1,2));
+    updateStats();
+  }, 12000);
+}
+
+init();
+</script>
+</body>
+</html>
