@@ -638,6 +638,39 @@
     color:var(--muted);
     font-family:'Share Tech Mono', monospace;
   }
+
+  /* LINKS */
+  a { text-decoration:none; }
+
+  .token-link {
+    color: var(--accent3);
+    background:rgba(245,196,0,0.1);
+    padding:1px 5px;
+    border-radius:3px;
+    margin:0 2px;
+    transition: background 0.2s, color 0.2s;
+    cursor:pointer;
+  }
+  .token-link:hover {
+    background:rgba(245,196,0,0.25);
+    color:#fff;
+  }
+
+  .block-link {
+    color: var(--muted);
+    font-family:'Share Tech Mono', monospace;
+    font-size:11px;
+    transition: color 0.2s;
+  }
+  .block-link:hover { color: var(--accent); text-decoration:underline; }
+
+  .token-sym-link {
+    font-family:'Share Tech Mono', monospace;
+    font-size:14px;
+    color: var(--accent);
+    transition: color 0.2s;
+  }
+  .token-sym-link:hover { color:#fff; text-decoration:underline; }
 </style>
 </head>
 <body>
@@ -824,6 +857,19 @@ function generateMevAlert() {
 }
 
 // ============================================================
+// HELPERS
+// ============================================================
+function dexUrl(sym) {
+  return `https://dexscreener.com/ethereum/${sym.toLowerCase()}`;
+}
+function etherscanBlock(block) {
+  return `https://etherscan.io/block/${block}`;
+}
+function tokenTag(sym) {
+  return `<a href="${dexUrl(sym)}" target="_blank" rel="noopener" class="token-highlight token-link">${sym}</a>`;
+}
+
+// ============================================================
 // RENDER ALERT ITEM
 // ============================================================
 function renderAlert(a) {
@@ -845,12 +891,12 @@ function renderAlert(a) {
       <div class="alert-icon ${typeClass}">${typeIcon}</div>
       <div class="alert-body">
         <div class="alert-tokens">
-          <span class="token-highlight">${a.token1}</span> → <span class="token-highlight">${a.token2}</span> → <span class="token-highlight">${a.token3}</span>${smallCapTag}
+          ${tokenTag(a.token1)} → ${tokenTag(a.token2)} → ${tokenTag(a.token3)}${smallCapTag}
         </div>
         <div class="alert-meta">
           <span><span class="badge ${typeBadge}">${a.type.toUpperCase()}</span></span>
           <span>${a.protocol}</span>
-          <span style="color:var(--muted);">#${a.block}</span>
+          <a href="${etherscanBlock(a.block)}" target="_blank" rel="noopener" class="block-link">#${a.block}</a>
           <span>${a.time}</span>
         </div>
       </div>
@@ -899,7 +945,7 @@ function renderTokenCard(t) {
       <div class="token-header">
         <div class="token-name">
           <div class="token-dot" style="background:${dotColor};box-shadow:0 0 6px ${dotColor}"></div>
-          <span class="token-sym">${t.sym}</span>
+          <a href="${dexUrl(t.sym)}" target="_blank" rel="noopener" class="token-sym token-sym-link">${t.sym} ↗</a>
           <span class="token-network">${t.network}</span>
         </div>
         <span class="risk-badge ${riskBadgeClass}">${riskBadge}</span>
